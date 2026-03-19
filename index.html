@@ -1,4 +1,7 @@
-<!DOCTYPE html><html lang="zh-CN"><head>
+ <!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>拼豆图案生成器 - Pixel Beads (无广告纯净版)</title>
@@ -225,9 +228,37 @@
             background-color: #28a745;
         }
         
+        /* 原始图片容器，位于页面底部 */
+        #original-image-container {
+            display: none; /* 默认隐藏 */
+            width: 100%;
+            padding: 20px;
+            background-color: #e9edf1;
+            border-top: 2px solid var(--border-color);
+            text-align: center;
+        }
+        #original-image-container h3 {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .image-wrapper {
+            background-color: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border: 1px solid var(--border-color);
+            max-width: 500px; /* 限制最大宽度 */
+            margin: 0 auto;
+        }
+        .image-wrapper img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            border-radius: 2px;
+        }
 
         @media (max-width: 768px) {
-
             main {
                 flex-direction: column;
                 overflow: visible; /* 允许内容滚动 */
@@ -239,15 +270,19 @@
                 height: auto;
                 overflow-y: visible;
             }
-
             .workspace {
                 padding: 10px;
                 height: auto; /* 移动端高度自适应 */
             }
+            #original-image-container {
+                padding: 15px;
+            }
+            .image-wrapper {
+                max-width: 90%;
+            }
         }
-
     </style>
-<meta name="UserComment" content='{"AIGC":{"Label":"1","ContentProducer":"skywork","ProduceID":"szrfdh9kd92scfxy3f712ahkacc2y1hp","ReservedCode1":"","ContentPropagator":"skywork","PropagateID":"szrfdh9kd92scfxy3f712ahkacc2y1hp","ReservedCode2":""}}' /></head>
+</head>
 <body style="padding-bottom: 0;">
 <header>
 <h1 id="section-1">Pixel Beads - 拼豆图案生成器</h1>
@@ -262,17 +297,28 @@
 <input accept="image/png, image/jpeg, image/webp" id="imageUpload" type="file"/>
 </div>
 <div class="control-group">
-<label for="boardWidth">2. 宽度 (拼豆颗粒数)</label>
-<input id="boardWidth" max="150" min="10" type="number" value="50"/>
+<label for="boardSize">2. 豆板尺寸</label>
+<select id="boardSize">
+<option value="50">50 x 50</option>
+<option value="52">52 x 52</option>
+<option value="104">104 x 104</option>
+</select>
 </div>
 <div class="control-group">
-<label for="paletteSelect">3. 颜色库</label>
+<label>3. 图纸尺寸 (颗粒数)</label>
+<div style="display: flex; gap: 10px;">
+<input id="patternWidth" min="10" placeholder="宽度" style="width: 50%;" type="number" value="50"/>
+<input id="patternHeight" min="10" placeholder="高度" style="width: 50%;" type="number" value="50"/>
+</div>
+</div>
+<div class="control-group">
+<label for="paletteSelect">4. 颜色库</label>
 <select id="paletteSelect">
 <option value="fusion_beads">融合豆全系列 (A/B/C/D/E/F/G/H/M)</option>
 </select>
 </div>
 <div class="control-group">
-<label for="dithering">4. 抖动算法 (平滑过渡)</label>
+<label for="dithering">5. 抖动算法 (平滑过渡)</label>
 <select id="dithering">
 <option value="none">无 (硬边缘)</option>
 <option value="floyd">Floyd-Steinberg</option>
@@ -307,6 +353,13 @@
 </section>
 </main>
 <img alt="Original" id="originalImage"/>
+<!-- 原始图片显示区域 (页面底部) -->
+<div id="original-image-container">
+<h3>原始图片</h3>
+<div class="image-wrapper">
+<img alt="Original" id="displayImage" src=""/>
+</div>
+</div>
 <!-- 剪裁模态框 -->
 <div class="crop-modal" id="cropModal">
 <div class="crop-container">
@@ -341,11 +394,11 @@
         fusion_beads: fusionBeadsPalette
     };
 
-
     const imageUpload = document.getElementById('imageUpload');
     const originalImage = document.getElementById('originalImage');
+    const displayImage = document.getElementById('displayImage');
+    const originalImageContainer = document.getElementById('original-image-container');
     const generateBtn = document.getElementById('generateBtn');
-
     const pixelCanvas = document.getElementById('pixelCanvas');
     const ctx = pixelCanvas.getContext('2d');
     const downloadBtn = document.getElementById('downloadBtn');
@@ -390,25 +443,25 @@
     });
 
     // 确认剪裁
-
     confirmCropBtn.addEventListener('click', function() {
         if (cropper) {
             const croppedCanvas = cropper.getCroppedCanvas();
             const imageUrl = croppedCanvas.toDataURL('image/png');
             
             originalImage.src = imageUrl;
+            displayImage.src = imageUrl;
 
             originalImage.onload = () => {
                 imageLoaded = true;
                 patternOutput.style.display = 'none';
                 placeholderText.style.display = 'block';
+                originalImageContainer.style.display = 'none';
             };
 
             cropper.destroy();
             cropModal.style.display = 'none';
         }
     });
-
 
     function colorDistance(c1, c2) {
         return Math.sqrt(Math.pow(c1.r - c2.r, 2) + Math.pow(c1.g - c2.g, 2) + Math.pow(c1.b - c2.b, 2));
@@ -433,12 +486,19 @@
             return;
         }
 
-        const targetWidth = parseInt(document.getElementById('boardWidth').value);
+
+        const boardSize = parseInt(document.getElementById('boardSize').value);
+        const targetWidth = parseInt(document.getElementById('patternWidth').value);
+        const targetHeight = parseInt(document.getElementById('patternHeight').value);
+
+        if (targetWidth > boardSize || targetHeight > boardSize) {
+            alert(`图纸尺寸 (${targetWidth}x${targetHeight}) 不能超过豆板尺寸 (${boardSize}x${boardSize})。`);
+            return;
+        }
+
         const paletteName = document.getElementById('paletteSelect').value;
         const currentPalette = palettes[paletteName] || palettes.fusion_beads;
-        
-        const ratio = originalImage.height / originalImage.width;
-        const targetHeight = Math.round(targetWidth * ratio);
+
 
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = targetWidth;
@@ -511,11 +571,10 @@
             }
         }
 
-
         placeholderText.style.display = 'none';
         patternOutput.style.display = 'block';
+        originalImageContainer.style.display = 'block';
         downloadBtn.style.display = 'inline-block';
-
         
         // 默认设置为适应屏幕
         pixelCanvas.style.width = '100%';
@@ -616,5 +675,6 @@
         });
     }
 </script>
-<div id="ai-watermark" style="width: 100%; text-align: center; padding: 15px; background-color: #ffffff; color: #979FAB; font-family: Arial, sans-serif; z-index: 1000; font-size: 12px;">内容由AI生成，不能保证真实</div>
-</body></html>
+<div id="ai-watermark" style="width: 100%; text-align: center; padding: 15px; background-color: #ffffff; color: #979FAB; font-family: Arial, sans-serif; z-index: 1000; font-size: 12px;">内容由AI生成，不能保证真实</div></body>
+</html>
+      
